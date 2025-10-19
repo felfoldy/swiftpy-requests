@@ -11,8 +11,8 @@ import SwiftUI
 
 @MainActor
 @Observable
-@Scriptable("fetch")
-final class FetchTask: NSObject {
+@Scriptable
+final class FetchRequest: NSObject {
     enum State {
         case downloading
         case failed
@@ -25,7 +25,7 @@ final class FetchTask: NSObject {
     private(set) var completed: Int64 = 0
     private(set) var total: Int64 = 0
     
-    internal var task: Task<Void, Never>?
+    internal var urlTask: Task<Void, Never>?
     internal var state: State = .downloading
 
     init(url urlString: String) throws {
@@ -37,7 +37,7 @@ final class FetchTask: NSObject {
 
         super.init()
 
-        task = Task {
+        urlTask = Task {
             do {
                 let (asyncBytes, response) = try await Foundation.URLSession.shared
                     .bytes(from: url)
@@ -59,31 +59,38 @@ final class FetchTask: NSObject {
             }
         }
     }
-}
-
-extension FetchTask: ViewRepresentable {
-    var representation: ViewRepresentation {
-        ViewRepresentation {
-            FetchTaskView(dataTask: self)
+    
+    func task() -> AsyncTask {
+        AsyncTask(presenting: self) {
+            _ = await self.urlTask?.value
+            return self.content
         }
     }
 }
 
-struct FetchTaskView: View {
-    @State var dataTask: FetchTask
+extension FetchRequest: ViewRepresentable {
+    var representation: ViewRepresentation {
+        ViewRepresentation {
+            FetchRequestView(request: self)
+        }
+    }
+}
+
+struct FetchRequestView: View {
+    @State var request: FetchRequest
     
     private var completed: String {
-        dataTask.completed
+        request.completed
             .formatted(.byteCount(style: .file))
     }
     
     private var total: String {
-        dataTask.total
+        request.total
             .formatted(.byteCount(style: .file))
     }
     
     private var imageName: String {
-        switch dataTask.state {
+        switch request.state {
         case .downloading: "arrow.down.circle"
         case .failed: "exclamationmark.circle"
         case .completed: "checkmark.circle"
@@ -91,7 +98,7 @@ struct FetchTaskView: View {
     }
     
     private var imageColor: Color {
-        switch dataTask.state {
+        switch request.state {
         case .downloading: .primary
         case .failed: .red
         case .completed: .green
@@ -106,7 +113,7 @@ struct FetchTaskView: View {
                     .foregroundStyle(imageColor)
                 
                 VStack(alignment: .leading) {
-                    Text(dataTask.url)
+                    Text(request.url)
                         .lineLimit(1)
                     
                     Text("\(completed) of \(total)")
@@ -115,16 +122,16 @@ struct FetchTaskView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                if dataTask.state == .downloading {
+                if request.state == .downloading {
                     Button {
-                        dataTask.task?.cancel()
+                        request.urlTask?.cancel()
                     } label: {
                         Image(systemName: "x.circle")
                     }
                 }
             }
 
-            ProgressView(value: Double(dataTask.completed) / Double(dataTask.total))
+            ProgressView(value: Double(request.completed) / Double(request.total))
                 .progressViewStyle(.automatic)
         }
         .overlay(alignment: .bottom) {
@@ -135,10 +142,10 @@ struct FetchTaskView: View {
 }
 
 #Preview {
-    @Previewable @State var response: FetchTask = {
-        try! FetchTask(url: "https://raw.githubusercontent.com/felfoldy/SpeechTools/refs/heads/main/Sources/SpeechTools/Language.swift")
+    @Previewable @State var request: FetchRequest = {
+        try! FetchRequest(url: "https://raw.githubusercontent.com/felfoldy/SpeechTools/refs/heads/main/Sources/SpeechTools/Language.swift")
     }()
     
-    FetchTaskView(dataTask: response)
+    FetchRequestView(request: request)
 }
 

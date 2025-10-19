@@ -18,6 +18,9 @@ let package = Package(
         .target(
             name: "SwiftPyRequests",
             dependencies: ["SwiftPy"],
+            resources: [
+                .process("Resources"),
+            ]
         ),
     ]
 )
