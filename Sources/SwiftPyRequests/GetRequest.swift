@@ -31,14 +31,18 @@ extension SwiftUI.Image {
 
 @Scriptable
 final class DataImage: ViewRepresentable {
-    let representation: ViewRepresentation
+    private let image: Image
     
     init(data: Data) throws {
         guard let image = SwiftUI.Image.from(data) else {
             throw PythonError.ValueError("Invalid image data.")
         }
         
-        representation = ViewRepresentation { image }
+        self.image = image
+    }
+    
+    var view: some View {
+        image
     }
 }
 
@@ -75,7 +79,7 @@ final class Response {
 @MainActor
 @Observable
 @Scriptable("_GetRequest")
-final class GetRequest: NSObject {
+final class GetRequest: NSObject, ViewRepresentable {
     enum State {
         case downloading
         case failed
@@ -102,6 +106,10 @@ final class GetRequest: NSObject {
 
         super.init()
         start()
+    }
+    
+    var view: some View {
+        GetRequestView(request: self)
     }
     
     func task() -> AsyncTask {
@@ -142,7 +150,7 @@ final class GetRequest: NSObject {
                     getRequestResponse.content.append(byte)
                     completed += 1
                     
-                    if completed % 100 == 0 {
+                    if completed % 1000 == 0 {
                         self.completed = completed
                     }
                 }
@@ -157,14 +165,6 @@ final class GetRequest: NSObject {
             } catch {
                 state = .failed
             }
-        }
-    }
-}
-
-extension GetRequest: ViewRepresentable {
-    var representation: ViewRepresentation {
-        ViewRepresentation {
-            GetRequestView(request: self)
         }
     }
 }
@@ -213,34 +213,20 @@ struct GetRequestView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             
-            switch request.state {
-            case .downloading:
+            if request.state == .downloading {
                 Button {
                     request.urlTask?.cancel()
                 } label: {
-                    Image(systemName: "square.fill")
+                    Image(systemName: imageName)
                         .frame(width: 40, height: 40)
-                        .background {
-                            progressView
-                        }
+                        .background(progressView)
                 }
-                
-            case .completed:
-                Image(systemName: "checkmark.circle")
+            } else {
+                Image(systemName: imageName)
                     .resizable()
                     .scaledToFit()
                     .padding(4)
                     .foregroundStyle(color)
-                
-            case .failed:
-                Button {
-                    request.start()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .frame(width: 40, height: 40)
-                        .background { progressView }
-                        .foregroundStyle(color)
-                }
             }
         }
         .frame(maxHeight: 44)
