@@ -12,12 +12,13 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.13.6")
+        .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.13.6"),
+        .package(url: "https://github.com/felfoldy/SwiftPyConsole", branch: "main")
     ],
     targets: [
         .target(
             name: "SwiftPyRequests",
-            dependencies: ["SwiftPy"],
+            dependencies: ["SwiftPy", "SwiftPyConsole"],
             resources: [
                 .process("Resources"),
             ]

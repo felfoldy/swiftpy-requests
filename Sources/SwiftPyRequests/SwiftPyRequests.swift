@@ -4,6 +4,9 @@ import SwiftPy
 public enum SwiftPyRequests {
     public static func initialize() {
         Interpreter.bundles.append(.module)
-        Interpreter.bindModule("requests", [FetchRequest.self])
+        Interpreter.bindModule("requests", [
+            GetRequest.self,
+            Response.self,
+        ])
     }
 }
