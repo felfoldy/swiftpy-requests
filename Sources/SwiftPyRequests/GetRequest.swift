@@ -68,11 +68,10 @@ final class Response {
     }
 
     /// Decodes the JSON response body (if any) as a Python object.
-    func json() throws -> object {
-        let jsonRef = Interpreter.module("json").toStack
-        let loads = jsonRef.reference?["loads"]
+    func json() throws -> object? {
         let textRef = text.toStack
-        return try PyAPI.call(loads, textRef.reference)
+        let loads = Interpreter.module("json")?["loads"]
+        return try loads?.call([textRef.reference])
     }
 }
 
