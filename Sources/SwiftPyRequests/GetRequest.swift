@@ -10,13 +10,6 @@ import SwiftPy
 import SwiftUI
 import DebugTools
 
-// TODO: Move image to views lib.
-#if canImport(UIKit)
-typealias AnyImage = UIImage
-#else
-typealias AnyImage = NSImage
-#endif
-
 extension SwiftUI.Image {
     static func from(_ data: Data) -> SwiftUI.Image? {
         #if canImport(UIKit)
