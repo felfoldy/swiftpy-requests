@@ -10,38 +10,9 @@ import SwiftPy
 import SwiftUI
 import DebugTools
 
-extension SwiftUI.Image {
-    static func from(_ data: Data) -> SwiftUI.Image? {
-        #if canImport(UIKit)
-        guard let uiImage = UIImage(data: data) else { return nil }
-        return SwiftUI.Image(uiImage: uiImage)
-        #else
-        guard let nsImage = NSImage(data: data) else { return nil }
-        return SwiftUI.Image(nsImage: nsImage)
-        #endif
-    }
-}
-
-@Scriptable
-final class DataImage: ViewRepresentable {
-    private let image: Image
-    
-    init(data: Data) throws {
-        guard let image = SwiftUI.Image.from(data) else {
-            throw PythonError.ValueError("Invalid image data.")
-        }
-        
-        self.image = image
-    }
-    
-    var view: some View {
-        image
-    }
-}
-
+/// The :class:`Response <Response>` object, which contains a server's response to an HTTP request.
 @MainActor
 @Scriptable
-/// The :class:`Response <Response>` object, which contains a server's response to an HTTP request.
 final class Response {
     typealias object = PyAPI.Reference
     
@@ -54,10 +25,6 @@ final class Response {
     /// Content of the response, in unicode.
     var text: String {
         String(data: content, encoding: .utf8) ?? ""
-    }
-    
-    var image: DataImage? {
-        try? DataImage(data: content)
     }
 
     /// Decodes the JSON response body (if any) as a Python object.
