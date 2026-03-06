@@ -1,5 +1,5 @@
 //
-//  GetRequest.swift
+//  Request.swift
 //  swiftpy-requests
 //
 //  Created by Tibor Felföldy on 2025-10-19.
@@ -8,11 +8,10 @@
 import Foundation
 import SwiftPy
 import SwiftUI
-import DebugTools
 
-/// The :class:`Response <Response>` object, which contains a server's response to an HTTP request.
-@MainActor
+/// The Response object, which contains a server's response to an HTTP request.
 @Scriptable
+@MainActor
 final class Response {
     typealias object = PyAPI.Reference
     
@@ -37,8 +36,7 @@ final class Response {
 
 @MainActor
 @Observable
-@Scriptable("_GetRequest")
-final class GetRequest: NSObject, ViewRepresentable {
+final class Request: NSObject, ViewRepresentable {
     enum State {
         case downloading
         case failed
@@ -49,21 +47,34 @@ final class GetRequest: NSObject, ViewRepresentable {
     var response: Response?
 
     private(set) var completed: Int64 = 0
-    private(set) var total: Int64 = 0
+    private(set) var total: Int64?
     
     internal var urlTask: Task<Void, Never>?
     internal var state: State = .downloading
-    private let requestURL: URL
+    private var request: URLRequest
 
-    init(url urlString: String) throws {
+    init(url urlString: String, httpMethod: String, headers: [String: String]?, json: [String: Any]?) throws {
         self.url = urlString
 
         guard let url = URL(string: urlString) else {
             throw PythonError.ValueError("Invalid URL: \(urlString)")
         }
-        requestURL = url
-
+        request = URLRequest(url: url)
         super.init()
+        
+        // Setup request.
+        request.httpMethod = httpMethod
+
+        if let headers {
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
+        
+        if let json {
+            let jsonData = try JSONSerialization.data(withJSONObject: json)
+            request.httpBody = jsonData
+        }
         start()
     }
     
@@ -83,62 +94,84 @@ final class GetRequest: NSObject, ViewRepresentable {
         total = 0
         state = .downloading
         
-        urlTask = Task {
+        urlTask = Task.detached(priority: .background) {
             do {
                 let (asyncBytes, response) = try await URLSession.shared
-                    .bytes(from: requestURL)
+                    .bytes(for: self.request)
                 
-                let getRequestResponse = Response()
-                self.response = getRequestResponse
+                let getRequestResponse = await Response()
+                await MainActor.run {
+                    self.response = getRequestResponse
+                }
+                
                 
                 // Set response status code.
                 if let httpResponse = response as? HTTPURLResponse {
-                    getRequestResponse.statusCode = httpResponse.statusCode
+                    await MainActor.run {
+                        getRequestResponse.statusCode = httpResponse.statusCode
+                    }
                 }
                 
                 // Set response length.
                 let length = response.expectedContentLength
-                getRequestResponse.content.reserveCapacity(Int(length))
-                total = length
-                
-                var completed: Int64 = 0
-                
-                for try await byte in asyncBytes {
-                    try Task.checkCancellation()
-
-                    getRequestResponse.content.append(byte)
-                    completed += 1
-                    
-                    if completed % 1000 == 0 {
-                        self.completed = completed
+                if length > 0 {
+                    await MainActor.run {
+                        getRequestResponse.content.reserveCapacity(Int(length))
+                        self.total = length
                     }
                 }
                 
-                self.completed = completed
-                
-                if getRequestResponse.statusCode == 200 {
-                    state = .completed
-                } else {
-                    state = .failed
+                var completed: Int64 = 0
+                var buffer = length > 0 ? Data(capacity: Int(length)) : Data()
+
+                for try await byte in asyncBytes {
+                    try Task.checkCancellation()
+
+                    buffer.append(byte)
+                    completed += 1
+                    
+                    if completed % 65536 == 0 {
+                        await MainActor.run {
+                            self.completed = completed
+                        }
+                    }
+                }
+
+                await MainActor.run {
+                    getRequestResponse.content = buffer
+                    self.completed = completed
+                    
+                    if let statusCode = getRequestResponse.statusCode, (200..<300).contains(statusCode) {
+                        self.state = .completed
+                    } else {
+                        self.state = .failed
+                    }
                 }
             } catch {
-                state = .failed
+                await MainActor.run {
+                    self.state = .failed
+                }
             }
         }
     }
 }
 
 struct GetRequestView: View {
-    @State var request: GetRequest
+    @State var request: Request
     
     private var completed: String {
         request.completed
             .formatted(.byteCount(style: .file))
     }
     
-    private var total: String {
-        request.total
+    private var progressBytes: String {
+        let total = request.total?
             .formatted(.byteCount(style: .file))
+        
+        if let total {
+            return "\(completed) of \(total)"
+        }
+        return completed
     }
     
     private var imageName: String {
@@ -165,8 +198,8 @@ struct GetRequestView: View {
             VStack(alignment: .leading) {
                 Text(request.url)
                     .lineLimit(1)
-                
-                Text("\(completed) of \(total)")
+
+                Text(progressBytes)
                     .foregroundStyle(.secondary)
                     .font(.footnote)
             }
@@ -198,25 +231,32 @@ struct GetRequestView: View {
             .stroke(lineWidth: 6)
             .foregroundStyle(.tertiary)
             .padding(4)
-        
-        Circle()
-            .trim(
-                from: 0,
-                to: Double(request.completed) / Double(request.total)
-            )
-            .stroke(style: StrokeStyle(
-                lineWidth: 6,
-                lineCap: .round
-            ))
-            .rotationEffect(.degrees(-90))
-            .foregroundStyle(color)
-            .padding(4)
+
+        if let total = request.total {
+            Circle()
+                .trim(
+                    from: 0,
+                    to: Double(request.completed) / Double(total)
+                )
+                .stroke(style: StrokeStyle(
+                    lineWidth: 6,
+                    lineCap: .round
+                ))
+                .rotationEffect(.degrees(-90))
+                .foregroundStyle(color)
+                .padding(4)
+        }
     }
 }
 
 #Preview {
-    @Previewable @State var request: GetRequest = {
-        try! GetRequest(url: "https://raw.githubusercontent.com/felfoldy/SpeechTools/refs/heads/main/Sources/SpeechTools/Language.swift")
+    @Previewable @State var request: Request = {
+        try! Request(
+            url: "https://raw.githubusercontent.com/felfoldy/SpeechTools/refs/heads/main/Sources/SpeechTools/Language.swift",
+            httpMethod: "GET",
+            headers: nil,
+            json: nil,
+        )
     }()
     
     ScrollView {

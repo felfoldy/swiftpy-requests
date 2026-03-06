@@ -4,16 +4,20 @@ import SwiftUI
 @MainActor
 public enum SwiftPyRequests {
     public static func initialize() {
-        Interpreter.bindModule("requests", [
-            GetRequest.self,
+        PyBind.module("requests", [
             Response.self,
         ]) { module in
-            module?.bind("get(url: str)") { argc, argv in
+            module?.bind("get(url: str, headers: dict = None, json: dict = None)") { argc, argv in
                 PyAPI.returnOrThrow {
-                    guard argc == 1, let url = String(argv) else {
-                        throw PythonError.ValueError("Expected a string")
-                    }
-                    return try GetRequest(url: url).task()
+                    let (url, headers, json): (String, [String: String]?, [String: Any]?) = try PyBind.castArgs(argv: argv)
+                    return try Request(url: url, httpMethod: "GET", headers: headers, json: json).task()
+                }
+            }
+
+            module?.bind("post(url: str, headers: dict = None, json: dict = None)") { argc, argv in
+                PyAPI.returnOrThrow {
+                    let (url, headers, json): (String, [String: String]?, [String: Any]?) = try PyBind.castArgs(argv: argv)
+                    return try Request(url: url, httpMethod: "POST", headers: headers, json: json).task()
                 }
             }
         }
