@@ -26,7 +26,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.17.0"),
+        .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.19.0"),
         .package(url: "https://github.com/ibrahimcetin/libgit2.git", exact: "1.9.2"),
         // .package(url: "https://github.com/ibrahimcetin/SwiftGitX", branch: "main"),
     ],
