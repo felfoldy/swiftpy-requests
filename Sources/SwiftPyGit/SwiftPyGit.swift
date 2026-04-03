@@ -19,12 +19,13 @@ public struct SwiftPyGit {
             UserPass.self,
             Reference.self,
             Object.self,
+            ResetMode.self,
         ]) { pygit2 in
             pygit2?.bind(
                 "clone_repository(url: str, path: Path, callbacks: RemoteCallbacks | None = None) -> AsyncTask[Repository]",
                 docstring: "Clones a new Git repository from url in the given path.",
             ) { argc, argv in
-                PyBind.function(argc, argv, Repository.clone(url:path:callbacks:))
+                PyBind.function(argc, argv, Repository.clone)
             }
         }
     }

@@ -15,6 +15,15 @@ let package = Package(
             name: "SwiftPyGit",
             targets: ["SwiftPyGit"]
         ),
+
+        .library(
+            name: "SwiftPyPackages",
+            targets: [
+                "SwiftPyPackages",
+                "SwiftPyRequests",
+                "SwiftPyGit"
+            ]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.17.0"),
@@ -29,6 +38,11 @@ let package = Package(
         .target(
             name: "SwiftPyGit",
             dependencies: ["SwiftPy", "libgit2"]
+        ),
+        .target(
+            name: "SwiftPyPackages",
+            dependencies: ["SwiftPy", "SwiftPyGit", "SwiftPyRequests"],
+            resources: [.copy("packages.py")]
         ),
     ]
 )
