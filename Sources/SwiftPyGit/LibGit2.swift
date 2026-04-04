@@ -8,15 +8,13 @@
 @preconcurrency import libgit2
 import SwiftPy
 
-let git = LibGit2.shared
+let git = LibGit2()
 
 extension git_clone_options: @retroactive @unchecked Sendable {}
 extension git_fetch_options: @retroactive @unchecked Sendable {}
 
 struct LibGit2 {
-    static let shared = LibGit2()
-
-    private init() {
+    fileprivate init() {
         precondition(git_libgit2_init() >= 0)
     }
 

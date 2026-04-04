@@ -2,6 +2,11 @@ import pygit2 as _git
 from pathlib import Path as _Path
 
 _credentials = None
+_remote_urls = []
+
+
+def add_github_source(owner: str):
+    _remote_urls.append(f"https://github.com/{owner}")
 
 
 def set_credentials(username: str, access_token: str) -> None:
@@ -10,7 +15,7 @@ def set_credentials(username: str, access_token: str) -> None:
 
 
 async def install(url: str, credentials: _git.UserPass | None = None) -> None:
-    locale_path = _local_path(url)
+    local_path = _local_path(url)
 
     if not credentials:
         credentials = _credentials
@@ -18,7 +23,7 @@ async def install(url: str, credentials: _git.UserPass | None = None) -> None:
     callbacks = _git.RemoteCallbacks(credentials)
 
     try:
-        repo = _git.Repository(locale_path)
+        repo = _git.Repository(local_path)
 
         # Fetch origin.
         origin = repo.remotes['origin']
@@ -30,12 +35,29 @@ async def install(url: str, credentials: _git.UserPass | None = None) -> None:
         repo.reset(target, _git.ResetMode.HARD)
 
     except:
-        await _git.clone_repository(url, locale_path, callbacks)
+        await _clone(url, local_path, callbacks)
 
 
 def uninstall(url: str) -> None:
-    locale_path = _local_path(url)
-    locale_path.unlink()
+    local_path = _local_path(url)
+    local_path.unlink()
+
+
+async def _clone(url: str, path: str, callbacks: _git.RemoteCallbacks) -> None:
+    if url.startswith("https://") or url.startswith("http://"):
+        await _git.clone_repository(url, path, callbacks)
+        return
+
+    for base_url in _remote_urls:
+        full_url = f"{base_url}/{url}"
+        try:
+            await _git.clone_repository(full_url, path, callbacks)
+            return
+        except Exception:
+            pass
+
+    raise ValueError(f"Could not install package: {url}")
+
 
 
 def _local_path(url: str) -> _Path:
