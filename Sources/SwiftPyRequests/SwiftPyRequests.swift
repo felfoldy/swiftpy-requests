@@ -2,23 +2,27 @@ import SwiftPy
 import SwiftUI
 
 @MainActor
+func get(url: String, headers: [String: String]?, json: [String: Any]?) throws -> AsyncTask {
+    try Request(url: url, httpMethod: "GET", headers: headers, json: json).task()
+}
+
+@MainActor
+func post(url: String, headers: [String: String]?, json: [String: Any]?) throws -> AsyncTask {
+    try Request(url: url, httpMethod: "POST", headers: headers, json: json).task()
+}
+
+@MainActor
 public enum SwiftPyRequests {
     public static func initialize() {
-        PyBind.module("requests", [
-            Response.self,
-        ]) { module in
-            module?.bind("get(url: str, headers: dict = None, json: dict = None)") { argc, argv in
-                PyAPI.returnOrThrow {
-                    let (url, headers, json): (String, [String: String]?, [String: Any]?) = try PyBind.castArgs(argv: argv)
-                    return try Request(url: url, httpMethod: "GET", headers: headers, json: json).task()
-                }
+        PyBind.module("requests") { requests in
+            requests.class(Response.self)
+
+            requests.def("get(url: str, headers: dict = None, json: dict = None) -> Response") { argc, argv in
+                PyBind.function(argc, argv, get(url:headers:json:))
             }
 
-            module?.bind("post(url: str, headers: dict = None, json: dict = None)") { argc, argv in
-                PyAPI.returnOrThrow {
-                    let (url, headers, json): (String, [String: String]?, [String: Any]?) = try PyBind.castArgs(argv: argv)
-                    return try Request(url: url, httpMethod: "POST", headers: headers, json: json).task()
-                }
+            requests.def("post(url: str, headers: dict = None, json: dict = None)") { argc, argv in
+                PyBind.function(argc, argv, post(url:headers:json:))
             }
         }
     }

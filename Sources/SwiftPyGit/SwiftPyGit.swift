@@ -11,19 +11,21 @@ import libgit2
 @MainActor
 public struct SwiftPyGit {
     public static func initialize() {
-        PyBind.module("pygit2", [
-            Repository.self,
-            Remotes.self,
-            Remote.self,
-            RemoteCallbacks.self,
-            UserPass.self,
-            Reference.self,
-            Object.self,
-            ResetMode.self,
-        ]) { pygit2 in
-            pygit2?.bind(
-                "clone_repository(url: str, path: Path, callbacks: RemoteCallbacks | None = None) -> AsyncTask[Repository]",
-                docstring: "Clones a new Git repository from url in the given path.",
+        PyBind.module("pygit2") { module in
+            module.classes(
+                Repository.self,
+                Remotes.self,
+                Remote.self,
+                RemoteCallbacks.self,
+                UserPass.self,
+                Reference.self,
+                Object.self,
+                ResetMode.self,
+            )
+
+            module.def(
+                "clone_repository(url: str, path: Path, callbacks: RemoteCallbacks | None = None) -> Repository",
+                docstring: "Clones a new Git repository from url in the given path."
             ) { argc, argv in
                 PyBind.function(argc, argv, Repository.clone)
             }
