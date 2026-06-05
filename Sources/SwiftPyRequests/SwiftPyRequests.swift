@@ -21,7 +21,7 @@ public enum SwiftPyRequests {
                 PyBind.function(argc, argv, get(url:headers:json:))
             }
 
-            requests.def("post(url: str, headers: dict = None, json: dict = None)") { argc, argv in
+            requests.def("post(url: str, headers: dict = None, json: dict = None) -> Response") { argc, argv in
                 PyBind.function(argc, argv, post(url:headers:json:))
             }
         }

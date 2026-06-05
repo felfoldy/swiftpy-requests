@@ -27,10 +27,8 @@ final class Response {
     }
 
     /// Decodes the JSON response body (if any) as a Python object.
-    func json() throws -> object? {
-        let textRef = text.retained
-        let loads = Interpreter.module("json")?["loads"]
-        return try loads?.call([textRef.reference])
+    func json() throws -> PyObject? {
+        try py.module("json")?.loads?(text)
     }
 }
 
