@@ -27,7 +27,7 @@ public final class Repository: @unchecked Sendable {
 
     /// Open a git repository.
     public convenience init(path: String) throws {
-        let path = try Path(path: path).url.path
+        let path = Path(path).url.path
         let pointer = try git.openRepository(path: path)
         self.init(pointer: pointer)
     }
@@ -69,7 +69,7 @@ public extension Repository {
                 .toOpaque()
             options.fetch_opts.callbacks.payload = callbacksPointer
         }
-        let path = try Path(path: path).url.path
+        let path = Path(path).url.path
         let pointer = try await git.cloneRepository(
             url: url,
             localPath: path,
