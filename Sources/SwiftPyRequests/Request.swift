@@ -34,7 +34,7 @@ final class Response {
 
 @MainActor
 @Observable
-final class Request: NSObject, ViewRepresentable {
+final class Request: NSObject {
     enum State {
         case downloading
         case failed
@@ -42,7 +42,7 @@ final class Request: NSObject, ViewRepresentable {
     }
     
     let url: String
-    var response: Response?
+    var response: Response
 
     private(set) var completed: Int64 = 0
     private(set) var total: Int64?
@@ -58,6 +58,7 @@ final class Request: NSObject, ViewRepresentable {
             throw PythonError.ValueError("Invalid URL: \(urlString)")
         }
         request = URLRequest(url: url)
+        response = Response()
         super.init()
         
         // Setup request.
@@ -75,16 +76,14 @@ final class Request: NSObject, ViewRepresentable {
         }
         start()
     }
-    
-    var view: some View {
-        GetRequestView(request: self)
+
+    func body() -> AnyView {
+        AnyView(GetRequestView(request: self))
     }
-    
-    func task() -> AsyncTask {
-        AsyncTask(presenting: self) {
-            _ = await self.urlTask?.value
-            return self.response
-        }
+
+    func task() async -> Response? {
+        _ = await self.urlTask?.value
+        return self.response
     }
     
     internal func start() {
@@ -97,11 +96,7 @@ final class Request: NSObject, ViewRepresentable {
                 let (asyncBytes, response) = try await URLSession.shared
                     .bytes(for: self.request)
                 
-                let getRequestResponse = await Response()
-                await MainActor.run {
-                    self.response = getRequestResponse
-                }
-                
+                let getRequestResponse = await self.response
                 
                 // Set response status code.
                 if let httpResponse = response as? HTTPURLResponse {
