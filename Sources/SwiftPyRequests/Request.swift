@@ -32,6 +32,19 @@ final class Response {
     }
 }
 
+/// Stops URLSession from following redirects, so the 3xx response is handed back
+/// to the caller the way Requests does with `allow_redirects=False`.
+final class RedirectBlocker: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest
+    ) async -> URLRequest? {
+        nil
+    }
+}
+
 @MainActor
 @Observable
 final class Request: NSObject {
@@ -49,31 +62,21 @@ final class Request: NSObject {
     
     internal var urlTask: Task<Void, Never>?
     internal var state: State = .downloading
-    private var request: URLRequest
+    private let request: URLRequest
 
-    init(url urlString: String, httpMethod: String, headers: [String: String]?, json: [String: Any]?) throws {
-        self.url = urlString
+    /// Refuses redirects for `allow_redirects=False`; `nil` while they're allowed.
+    private let redirectBlocker: RedirectBlocker?
 
-        guard let url = URL(string: urlString) else {
-            throw PythonError.ValueError("Invalid URL: \(urlString)")
-        }
-        request = URLRequest(url: url)
+    init(_ parameters: RequestParameters) throws {
+        let request = try parameters.urlRequest()
+
+        self.request = request
+        // The displayed URL includes the encoded query.
+        url = request.url?.absoluteString ?? parameters.url
+        redirectBlocker = parameters.allowRedirects ? nil : RedirectBlocker()
         response = Response()
         super.init()
-        
-        // Setup request.
-        request.httpMethod = httpMethod
 
-        if let headers {
-            for (key, value) in headers {
-                request.setValue(value, forHTTPHeaderField: key)
-            }
-        }
-        
-        if let json {
-            let jsonData = try JSONSerialization.data(withJSONObject: json)
-            request.httpBody = jsonData
-        }
         start()
     }
 
@@ -94,7 +97,7 @@ final class Request: NSObject {
         urlTask = Task.detached(priority: .background) {
             do {
                 let (asyncBytes, response) = try await URLSession.shared
-                    .bytes(for: self.request)
+                    .bytes(for: self.request, delegate: self.redirectBlocker)
                 
                 let getRequestResponse = await self.response
                 
@@ -245,10 +248,10 @@ struct GetRequestView: View {
 #Preview {
     @Previewable @State var request: Request = {
         try! Request(
-            url: "https://raw.githubusercontent.com/felfoldy/SpeechTools/refs/heads/main/Sources/SpeechTools/Language.swift",
-            httpMethod: "GET",
-            headers: nil,
-            json: nil,
+            RequestParameters(
+                method: "GET",
+                url: "https://raw.githubusercontent.com/felfoldy/SpeechTools/refs/heads/main/Sources/SpeechTools/Language.swift"
+            )
         )
     }()
     
