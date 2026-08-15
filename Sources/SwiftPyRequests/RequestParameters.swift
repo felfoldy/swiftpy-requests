@@ -46,7 +46,7 @@ struct RequestParameters {
     }
 
     /// Builds the request with its query, body, headers, and timeout applied.
-    func urlRequest() throws -> URLRequest {
+    func urlRequest() throws(PythonError) -> URLRequest {
         if data != nil && json != nil {
             throw PythonError.ValueError("Cannot pass both data and json")
         }
@@ -106,7 +106,7 @@ private extension RequestParameters {
     ///
     /// `data` accepts the three shapes Requests does: a mapping is form encoded,
     /// a string is sent as UTF-8 text, and bytes are sent verbatim.
-    func body() throws -> Body? {
+    func body() throws(PythonError) -> Body? {
         if let json {
             guard let text: String = try py.module("json")?.dumps?(json) else {
                 throw PythonError.ValueError("Could not serialize json")

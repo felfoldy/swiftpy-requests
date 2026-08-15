@@ -14,21 +14,134 @@ import SwiftUI
 @MainActor
 final class Response {
     typealias object = PyAPI.Reference
-    
+
     /// The HTTP status code of the receiver.
     var statusCode: Int?
+
+    /// The URL the response was finally received from.
+    var url: String?
+
+    /// The response headers, keyed by their canonical name.
+    var headers: [String: String] = [:]
+
+    /// The textual reason phrase of the status code.
+    var reason: String?
+
+    /// The charset used to decode the content.
+    var encoding: String?
 
     /// Content of the response, in bytes.
     var content = Data()
 
+    /// Whether the request was answered with a status below 400.
+    var ok: Bool {
+        guard let statusCode else { return false }
+        return statusCode < 400
+    }
+
     /// Content of the response, in unicode.
     var text: String {
-        String(data: content, encoding: .utf8) ?? ""
+        if let text = String(data: content, encoding: stringEncoding) {
+            return text
+        }
+        return String(decoding: content, as: UTF8.self)
     }
 
     /// Decodes the JSON response body (if any) as a Python object.
-    func json() throws -> PyObject? {
+    func json() throws(PythonError) -> PyObject? {
         try py.module("json")?.loads?(text)
+    }
+
+    /// Raises an HTTPError when the status code is 4xx or 5xx.
+    func raiseForStatus() throws(PythonError) {
+        guard let statusCode, statusCode >= 400 else { return }
+
+        let kind = statusCode < 500 ? "Client Error" : "Server Error"
+        let message = "\(statusCode) \(kind): \(reason ?? "Unknown") for url: \(url ?? "")"
+
+        let error: PythonError? = try py.module("requests.exceptions")?.HTTPError?(message)
+        throw error ?? .RuntimeError(message)
+    }
+
+    /// Stores everything the received headers carry.
+    internal func receive(_ response: HTTPURLResponse) {
+        statusCode = response.statusCode
+        url = response.url?.absoluteString
+        reason = Self.reason(for: response.statusCode)
+        encoding = response.textEncodingName
+
+        headers = Dictionary(
+            response.allHeaderFields.map { field, value in
+                (Self.canonical("\(field)"), "\(value)")
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// The encoding `text` decodes with, falling back to UTF-8.
+    private var stringEncoding: String.Encoding {
+        guard let encoding else { return .utf8 }
+
+        let charset = CFStringConvertIANACharSetNameToEncoding(encoding as CFString)
+        guard charset != kCFStringEncodingInvalidId else { return .utf8 }
+
+        return String.Encoding(
+            rawValue: CFStringConvertEncodingToNSStringEncoding(charset)
+        )
+    }
+}
+
+// MARK: - Header and status formatting
+
+private extension Response {
+    /// The header names the token rule below would capitalize incorrectly.
+    static let headerOverrides = [
+        "etag": "ETag",
+        "www-authenticate": "WWW-Authenticate",
+        "content-md5": "Content-MD5",
+        "te": "TE",
+        "dnt": "DNT",
+    ]
+
+    /// The reason phrases of the statuses a script is likely to meet.
+    static let reasons = [
+        200: "OK", 201: "Created", 202: "Accepted", 204: "No Content",
+        301: "Moved Permanently", 302: "Found", 303: "See Other",
+        304: "Not Modified", 307: "Temporary Redirect", 308: "Permanent Redirect",
+        400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+        404: "Not Found", 405: "Method Not Allowed", 408: "Request Timeout",
+        409: "Conflict", 410: "Gone", 418: "I'm a Teapot",
+        422: "Unprocessable Entity", 429: "Too Many Requests",
+        500: "Internal Server Error", 501: "Not Implemented", 502: "Bad Gateway",
+        503: "Service Unavailable", 504: "Gateway Timeout",
+    ]
+
+    /// Normalizes header casing, since HTTP/2 hosts send lowercase names.
+    static func canonical(_ name: String) -> String {
+        let lowercased = name.lowercased()
+
+        if let override = headerOverrides[lowercased] {
+            return override
+        }
+
+        return lowercased
+            .split(separator: "-", omittingEmptySubsequences: false)
+            .map(\.capitalized)
+            .joined(separator: "-")
+    }
+
+    /// The status phrase, in English, since URLSession drops the server's own.
+    static func reason(for statusCode: Int) -> String {
+        reasons[statusCode]
+            ?? HTTPURLResponse.localizedString(forStatusCode: statusCode).capitalized
+    }
+}
+
+extension Response: CustomStringConvertible {
+    nonisolated var description: String {
+        MainActor.assumeIsolated {
+            "<Response [\(statusCode.map(String.init) ?? "None")]>"
+        }
     }
 }
 
@@ -67,7 +180,7 @@ final class Request: NSObject {
     /// Refuses redirects for `allow_redirects=False`; `nil` while they're allowed.
     private let redirectBlocker: RedirectBlocker?
 
-    init(_ parameters: RequestParameters) throws {
+    init(_ parameters: RequestParameters) throws(PythonError) {
         let request = try parameters.urlRequest()
 
         self.request = request
@@ -101,10 +214,10 @@ final class Request: NSObject {
                 
                 let getRequestResponse = await self.response
                 
-                // Set response status code.
+                // Set status, final URL, headers, reason and encoding.
                 if let httpResponse = response as? HTTPURLResponse {
                     await MainActor.run {
-                        getRequestResponse.statusCode = httpResponse.statusCode
+                        getRequestResponse.receive(httpResponse)
                     }
                 }
                 

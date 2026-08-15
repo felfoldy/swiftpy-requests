@@ -11,7 +11,7 @@ func request(
     headers: [String: String]?,
     timeout: Double?,
     allowRedirects: Bool
-) async throws -> Response? {
+) async throws(PythonError) -> Response? {
     try await Request(
         RequestParameters(
             method: method,
@@ -32,7 +32,7 @@ func request(
 @MainActor
 private func queryVerb(
     _ method: String
-) -> @MainActor (String, [String: Any]?, PyObject?, PyObject?, [String: String]?, Double?, Bool) async throws -> Response? {
+) -> @MainActor (String, [String: Any]?, PyObject?, PyObject?, [String: String]?, Double?, Bool) async throws(PythonError) -> Response? {
     { url, params, data, json, headers, timeout, allowRedirects in
         try await request(
             method: method,
@@ -51,7 +51,7 @@ private func queryVerb(
 @MainActor
 private func bodyVerb(
     _ method: String
-) -> @MainActor (String, PyObject?, PyObject?, [String: Any]?, [String: String]?, Double?, Bool) async throws -> Response? {
+) -> @MainActor (String, PyObject?, PyObject?, [String: Any]?, [String: String]?, Double?, Bool) async throws(PythonError) -> Response? {
     { url, data, json, params, headers, timeout, allowRedirects in
         try await request(
             method: method,
@@ -91,8 +91,16 @@ private func docs(for method: String, followsRedirects: Bool = true) -> String {
 @MainActor
 public enum SwiftPyRequests {
     public static func initialize() {
+        PyBind.module("requests.exceptions", in: .module)
+
         PyBind.module("requests") { requests in
             requests.class(Response.self)
+            let exceptions = py.module("requests.exceptions")
+
+            requests.RequestException = exceptions?.RequestException
+            requests.ConnectionError = exceptions?.ConnectionError
+            requests.Timeout = exceptions?.Timeout
+            requests.HTTPError = exceptions?.HTTPError
 
             // Each verb orders its parameters the way Requests documents them, so
             // positional calls mean the same thing here as they do in Python.

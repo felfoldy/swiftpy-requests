@@ -26,7 +26,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.27.0"),
+        .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.27.2"),
         .package(url: "https://github.com/ibrahimcetin/libgit2.git", exact: "1.9.2"),
         // .package(url: "https://github.com/ibrahimcetin/SwiftGitX", branch: "main"),
     ],
@@ -34,6 +34,7 @@ let package = Package(
         .target(
             name: "SwiftPyRequests",
             dependencies: ["SwiftPy"],
+            resources: [.copy("requests.exceptions.py")]
         ),
         .target(
             name: "SwiftPyGit",
