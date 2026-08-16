@@ -11,7 +11,7 @@ func request(
     headers: [String: String]?,
     timeout: Double?,
     allowRedirects: Bool
-) async throws(PythonError) -> Response? {
+) async throws -> Response {
     try await Request(
         RequestParameters(
             method: method,
@@ -23,7 +23,7 @@ func request(
             timeout: timeout,
             allowRedirects: allowRedirects
         )
-    ).task()
+    ).send()
 }
 
 // MARK: - Verbs
@@ -32,7 +32,7 @@ func request(
 @MainActor
 private func queryVerb(
     _ method: String
-) -> @MainActor (String, [String: Any]?, PyObject?, PyObject?, [String: String]?, Double?, Bool) async throws(PythonError) -> Response? {
+) -> @MainActor (String, [String: Any]?, PyObject?, PyObject?, [String: String]?, Double?, Bool) async throws -> Response {
     { url, params, data, json, headers, timeout, allowRedirects in
         try await request(
             method: method,
@@ -51,7 +51,7 @@ private func queryVerb(
 @MainActor
 private func bodyVerb(
     _ method: String
-) -> @MainActor (String, PyObject?, PyObject?, [String: Any]?, [String: String]?, Double?, Bool) async throws(PythonError) -> Response? {
+) -> @MainActor (String, PyObject?, PyObject?, [String: Any]?, [String: String]?, Double?, Bool) async throws -> Response {
     { url, data, json, params, headers, timeout, allowRedirects in
         try await request(
             method: method,

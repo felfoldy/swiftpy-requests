@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftPy
-import SwiftUI
 
 /// The Response object, which contains a server's response to an HTTP request.
 @Scriptable
@@ -145,231 +144,160 @@ extension Response: CustomStringConvertible {
     }
 }
 
-/// Stops URLSession from following redirects, so the 3xx response is handed back
-/// to the caller the way Requests does with `allow_redirects=False`.
-final class RedirectBlocker: NSObject, URLSessionTaskDelegate, Sendable {
+// MARK: - Transport
+
+/// Collects a task's response and body chunks, and finishes the caller waiting
+/// on `run(_:)`.
+///
+/// Every stored property is touched on the session's serial delegate queue,
+/// except the continuation, which is set before `resume()` starts the task.
+private final class RequestHandler: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let followsRedirects: Bool
+    private let reporter: AsyncTask?
+    private var response: HTTPURLResponse?
+    private var content = Data()
+    private var continuation: CheckedContinuation<(HTTPURLResponse?, Data), any Error>?
+
+    /// The declared body length, and the percentage last reported.
+    private var expected: Int64 = 0
+    private var percent = 0
+
+    init(followsRedirects: Bool, reporter: AsyncTask?) {
+        self.followsRedirects = followsRedirects
+        self.reporter = reporter
+    }
+
+    /// Runs the task until it completes, and cancels it if the caller is stopped.
+    func run(_ task: URLSessionDataTask) async throws -> (HTTPURLResponse?, Data) {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse
+    ) async -> URLSession.ResponseDisposition {
+        self.response = response as? HTTPURLResponse
+
+        expected = response.expectedContentLength
+        if expected > 0 {
+            content.reserveCapacity(Int(expected))
+        }
+
+        return .allow
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        content.append(data)
+
+        // Report whole percentages only, or a chunked body floods the console
+        // with feedback. A body of unknown length reports nothing, and a
+        // compressed one decodes past its declared length, hence the clamp.
+        guard let reporter, expected > 0 else { return }
+
+        let received = min(Int(Double(content.count) / Double(expected) * 100), 100)
+        guard received != percent else { return }
+        percent = received
+
+        Task { @MainActor in reporter.setProgress(Double(received) / 100) }
+    }
+
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse,
         newRequest request: URLRequest
     ) async -> URLRequest? {
-        nil
+        // Refusing the redirect hands the 3xx response back to the caller, the
+        // way Requests does with `allow_redirects=False`.
+        followsRedirects ? request : nil
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        let continuation = self.continuation
+        self.continuation = nil
+
+        if let error {
+            continuation?.resume(throwing: error)
+        } else {
+            continuation?.resume(returning: (response, content))
+        }
     }
 }
 
 @MainActor
-@Observable
-final class Request: NSObject {
-    enum State {
-        case downloading
-        case failed
-        case completed
-    }
-    
+final class Request {
+    /// The requested URL, including the encoded query.
     let url: String
-    var response: Response
 
-    private(set) var completed: Int64 = 0
-    private(set) var total: Int64?
-    
-    internal var urlTask: Task<Void, Never>?
-    internal var state: State = .downloading
     private let request: URLRequest
-
-    /// Refuses redirects for `allow_redirects=False`; `nil` while they're allowed.
-    private let redirectBlocker: RedirectBlocker?
+    private let followsRedirects: Bool
 
     init(_ parameters: RequestParameters) throws(PythonError) {
         let request = try parameters.urlRequest()
 
         self.request = request
-        // The displayed URL includes the encoded query.
         url = request.url?.absoluteString ?? parameters.url
-        redirectBlocker = parameters.allowRedirects ? nil : RedirectBlocker()
-        response = Response()
-        super.init()
-
-        start()
+        followsRedirects = parameters.allowRedirects
     }
 
-    func body() -> AnyView {
-        AnyView(GetRequestView(request: self))
-    }
-
-    func task() async -> Response? {
-        _ = await self.urlTask?.value
-        return self.response
-    }
-    
-    internal func start() {
-        completed = 0
-        total = 0
-        state = .downloading
-        
-        urlTask = Task.detached(priority: .background) {
-            do {
-                let (asyncBytes, response) = try await URLSession.shared
-                    .bytes(for: self.request, delegate: self.redirectBlocker)
-                
-                let getRequestResponse = await self.response
-                
-                // Set status, final URL, headers, reason and encoding.
-                if let httpResponse = response as? HTTPURLResponse {
-                    await MainActor.run {
-                        getRequestResponse.receive(httpResponse)
-                    }
-                }
-                
-                // Set response length.
-                let length = response.expectedContentLength
-                if length > 0 {
-                    await MainActor.run {
-                        getRequestResponse.content.reserveCapacity(Int(length))
-                        self.total = length
-                    }
-                }
-                
-                var completed: Int64 = 0
-                var buffer = length > 0 ? Data(capacity: Int(length)) : Data()
-
-                for try await byte in asyncBytes {
-                    try Task.checkCancellation()
-
-                    buffer.append(byte)
-                    completed += 1
-                    
-                    if completed % 65536 == 0 {
-                        await MainActor.run {
-                            self.completed = completed
-                        }
-                    }
-                }
-
-                await MainActor.run {
-                    getRequestResponse.content = buffer
-                    self.completed = completed
-                    
-                    if let statusCode = getRequestResponse.statusCode, (200..<300).contains(statusCode) {
-                        self.state = .completed
-                    } else {
-                        self.state = .failed
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.state = .failed
-                }
-            }
-        }
-    }
-}
-
-struct GetRequestView: View {
-    @State var request: Request
-    
-    private var completed: String {
-        request.completed
-            .formatted(.byteCount(style: .file))
-    }
-    
-    private var progressBytes: String {
-        let total = request.total?
-            .formatted(.byteCount(style: .file))
-        
-        if let total {
-            return "\(completed) of \(total)"
-        }
-        return completed
-    }
-    
-    private var imageName: String {
-        switch request.state {
-        case .downloading: "arrow.down.circle"
-        case .failed: "exclamationmark.circle"
-        case .completed: "checkmark.circle"
-        }
-    }
-    
-    private var color: Color {
-        switch request.state {
-        case .downloading: .purple
-        case .failed: .red
-        case .completed: .green
-        }
-    }
-    
-    var body: some View {
-        LogContainerView(tint: color) {
-            Image(systemName: "globe")
-                .font(.title)
-            
-            VStack(alignment: .leading) {
-                Text(request.url)
-                    .lineLimit(1)
-
-                Text(progressBytes)
-                    .foregroundStyle(.secondary)
-                    .font(.footnote)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            
-            if request.state == .downloading {
-                Button {
-                    request.urlTask?.cancel()
-                } label: {
-                    Image(systemName: imageName)
-                        .frame(width: 40, height: 40)
-                        .background(progressView)
-                }
-            } else {
-                Image(systemName: imageName)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(4)
-                    .foregroundStyle(color)
-            }
-        }
-        .frame(maxHeight: 44)
-        .buttonStyle(.plain)
-    }
-    
-    @ViewBuilder
-    private var progressView: some View {
-        Circle()
-            .stroke(lineWidth: 6)
-            .foregroundStyle(.tertiary)
-            .padding(4)
-
-        if let total = request.total {
-            Circle()
-                .trim(
-                    from: 0,
-                    to: Double(request.completed) / Double(total)
-                )
-                .stroke(style: StrokeStyle(
-                    lineWidth: 6,
-                    lineCap: .round
-                ))
-                .rotationEffect(.degrees(-90))
-                .foregroundStyle(color)
-                .padding(4)
-        }
-    }
-}
-
-#Preview {
-    @Previewable @State var request: Request = {
-        try! Request(
-            RequestParameters(
-                method: "GET",
-                url: "https://raw.githubusercontent.com/felfoldy/SpeechTools/refs/heads/main/Sources/SpeechTools/Language.swift"
-            )
+    /// Performs the request, raising the matching requests exception on failure.
+    func send() async throws -> Response {
+        // Read the running task here: the delegate runs outside it and cannot
+        // see the task local itself.
+        let handler = RequestHandler(
+            followsRedirects: followsRedirects,
+            reporter: AsyncTask.current
         )
-    }()
-    
-    ScrollView {
-        GetRequestView(request: request)
+
+        let task = URLSession.shared.dataTask(with: request)
+        task.delegate = handler
+
+        let response = Response()
+
+        do {
+            let (httpResponse, content) = try await handler.run(task)
+
+            if let httpResponse {
+                response.receive(httpResponse)
+            }
+            response.content = content
+        } catch {
+            throw exception(for: error)
+        }
+
+        return response
+    }
+
+    /// Translates a transport failure into the matching Python exception. A stop
+    /// stays a `CancellationError`, so it unwinds without raising into the card.
+    private func exception(for error: any Error) -> any Error {
+        let urlError = error as? URLError
+
+        if error is CancellationError || urlError?.code == .cancelled {
+            return CancellationError()
+        }
+
+        let name = switch urlError?.code {
+        case .timedOut:
+            "Timeout"
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+             .notConnectedToInternet, .networkConnectionLost, .secureConnectionFailed:
+            "ConnectionError"
+        default:
+            "RequestException"
+        }
+
+        let message = "\(error.localizedDescription) for url: \(url)"
+        let exceptions = py.module("requests.exceptions")
+        let raised: PythonError? = try? exceptions?[dynamicMember: name]?(message)
+        return raised ?? PythonError.RuntimeError(message)
     }
 }
-
