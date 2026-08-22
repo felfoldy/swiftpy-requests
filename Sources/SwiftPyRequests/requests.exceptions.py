@@ -1,3 +1,5 @@
+__doc__ = "The exceptions a request raises when it fails."
+
 # The interpreter drops class docstrings, so the documentation help() shows is
 # assigned to __doc__ directly.
 

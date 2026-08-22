@@ -93,7 +93,10 @@ public enum SwiftPyRequests {
     public static func initialize() {
         PyBind.module("requests.exceptions", in: .module)
 
-        PyBind.module("requests") { requests in
+        PyBind.module(
+            "requests",
+            docs: "Awaitable HTTP requests: get, post, put, patch, delete, and head."
+        ) { requests in
             requests.class(Response.self)
             let exceptions = py.module("requests.exceptions")
 
