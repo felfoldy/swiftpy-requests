@@ -70,6 +70,7 @@ private func bodyVerb(
 
 /// The parameter reference every verb shares, so `help()` explains all of them.
 private let parameterDocs = """
+    url: The URL to send the request to.
     params: Mapping appended to the URL's query; a list value repeats the key.
     data: A dict (form encoded), str, or bytes request body.
     json: An object sent as an application/json body. Cannot be used with data.

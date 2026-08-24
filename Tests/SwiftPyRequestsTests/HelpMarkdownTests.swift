@@ -78,6 +78,7 @@ struct HelpMarkdownTests {
         #expect(markdown.contains("""
         ## Parameters
 
+        - `url`: The URL to send the request to.
         - `params`: Mapping appended to the URL's query; a list value repeats the key.
         - `data`: A dict (form encoded), str, or bytes request body.
         - `json`: An object sent as an application/json body. Cannot be used with data.
@@ -87,9 +88,9 @@ struct HelpMarkdownTests {
         """))
     }
 
-    @Test("leaves the undocumented url parameter out")
-    func undocumentedParameter() {
-        #expect(!markdown.contains("- `url`"))
+    @Test("documents the required url parameter")
+    func urlParameter() {
+        #expect(markdown.contains("- `url`: The URL to send the request to."))
     }
 
     @Test("has no discussion, the docstring being summary and parameters")
