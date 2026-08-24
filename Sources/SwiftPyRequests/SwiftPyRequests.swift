@@ -108,7 +108,7 @@ public enum SwiftPyRequests {
             // Each verb orders its parameters the way Requests documents them, so
             // positional calls mean the same thing here as they do in Python.
             requests.asyncDef(
-                "request(method: str, url: str, params: dict = None, data=None, json=None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
+                "request(method: str, url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
                 docstring: """
                 Sends a request with the given method and returns the Response. Await the result.
 
@@ -121,35 +121,35 @@ public enum SwiftPyRequests {
             }
 
             requests.asyncDef(
-                "get(url: str, params: dict = None, data=None, json=None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
+                "get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
                 docstring: docs(for: "GET")
             ) { argc, argv in
                 PyBind.function(argc, argv, queryVerb("GET"))
             }
 
             requests.asyncDef(
-                "post(url: str, data=None, json=None, params: dict = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
+                "post(url: str, data: Any = None, json: Any = None, params: dict = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
                 docstring: docs(for: "POST")
             ) { argc, argv in
                 PyBind.function(argc, argv, bodyVerb("POST"))
             }
 
             requests.asyncDef(
-                "put(url: str, data=None, json=None, params: dict = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
+                "put(url: str, data: Any = None, json: Any = None, params: dict = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
                 docstring: docs(for: "PUT")
             ) { argc, argv in
                 PyBind.function(argc, argv, bodyVerb("PUT"))
             }
 
             requests.asyncDef(
-                "patch(url: str, data=None, json=None, params: dict = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
+                "patch(url: str, data: Any = None, json: Any = None, params: dict = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
                 docstring: docs(for: "PATCH")
             ) { argc, argv in
                 PyBind.function(argc, argv, bodyVerb("PATCH"))
             }
 
             requests.asyncDef(
-                "delete(url: str, params: dict = None, data=None, json=None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
+                "delete(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response",
                 docstring: docs(for: "DELETE")
             ) { argc, argv in
                 PyBind.function(argc, argv, queryVerb("DELETE"))
@@ -157,7 +157,7 @@ public enum SwiftPyRequests {
 
             // Requests leaves redirects unfollowed for HEAD.
             requests.asyncDef(
-                "head(url: str, params: dict = None, data=None, json=None, headers: dict = None, timeout: float = None, allow_redirects: bool = False) -> Response",
+                "head(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = False) -> Response",
                 docstring: docs(for: "HEAD", followsRedirects: false)
             ) { argc, argv in
                 PyBind.function(argc, argv, queryVerb("HEAD"))

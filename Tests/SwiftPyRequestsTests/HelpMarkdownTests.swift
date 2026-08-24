@@ -66,7 +66,7 @@ struct HelpMarkdownTests {
     func signature() {
         #expect(markdown.contains("""
         ```python
-        async def get(url: str, params: dict = None, data=None, json=None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
+        async def get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
         ```
         """))
         // The trailing colon belongs to a source stub, not to a signature.
@@ -127,7 +127,7 @@ struct ModuleListingTests {
         #### [get](pyprompt://reference?v=1&code=requests.get)
 
         ```python
-        async def get(url: str, params: dict = None, data=None, json=None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
+        async def get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
         ```
 
         Sends a GET request and returns the Response. Await the result.
@@ -137,10 +137,13 @@ struct ModuleListingTests {
     @Test("keeps the signature in a code block rather than in the link")
     func signatureIsNotTheLink() {
         // A link long enough to wrap loses its frame and spills over the line,
-        // so only the name is linked.
+        // so what is linked is the bare name.
         for line in markdown.split(separator: "\n") where line.hasPrefix("#### [") {
-            #expect(!line.contains("def "))
-            #expect(line.count < 80)
+            let linked = line.dropFirst("#### [".count).prefix { $0 != "]" }
+
+            #expect(!linked.isEmpty)
+            #expect(!linked.contains("("))
+            #expect(!linked.contains(" "))
         }
     }
 
