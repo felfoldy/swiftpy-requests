@@ -45,5 +45,9 @@ let package = Package(
             dependencies: ["SwiftPy", "SwiftPyGit", "SwiftPyRequests"],
             resources: [.copy("packages.py")]
         ),
+        .testTarget(
+            name: "SwiftPyRequestsTests",
+            dependencies: ["SwiftPyRequests"]
+        ),
     ]
 )
