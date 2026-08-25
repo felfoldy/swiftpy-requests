@@ -28,7 +28,7 @@ struct HelpMarkdownTests {
         #expect(markdown.hasPrefix("""
         # get
 
-        `requests`
+        ``requests``
 
         Sends a GET request and returns the Response. Await the result.
         """))
@@ -46,20 +46,8 @@ struct HelpMarkdownTests {
         #expect(method.hasPrefix("""
         # raise_for_status
 
-        `requests`
+        ``requests``
         """))
-    }
-
-    @Test("links the module where the host takes references")
-    func linkedModule() throws {
-        Interpreter.run("""
-        _help_module._reference_url_prefix = 'pyprompt://reference?v=1&code='
-        _linked_md = "\\n".join(_help_module._markdown_lines('requests.get'))
-        _help_module._reference_url_prefix = None
-        """)
-        let linked: String = try #require(Interpreter.evaluate("_linked_md"))
-
-        #expect(linked.contains("[`requests`](pyprompt://reference?v=1&code=requests)"))
     }
 
     @Test("shows the awaitable signature as a python code block")
@@ -104,8 +92,8 @@ struct HelpMarkdownTests {
     }
 }
 
-/// `help('requests')` lists what the module offers, each function linked to its
-/// own documentation rather than stacked into one code block.
+/// `help('requests')` lists what the module offers, each function referencing
+/// its own documentation rather than stacked into one code block.
 @Suite("help('requests')") @MainActor
 struct ModuleListingTests {
     let markdown: String
@@ -115,17 +103,15 @@ struct ModuleListingTests {
         Interpreter.run("import interpreter")
         Interpreter.run("""
         import help as _help_module
-        _help_module._reference_url_prefix = 'pyprompt://reference?v=1&code='
         _module_md = "\\n".join(_help_module._markdown_lines('requests'))
-        _help_module._reference_url_prefix = None
         """)
         markdown = try #require(Interpreter.evaluate("_module_md"))
     }
 
-    @Test("heads each entry with the name, linked to its own help")
+    @Test("heads each entry with the name, referencing its own help")
     func entry() {
         #expect(markdown.contains("""
-        #### [get](pyprompt://reference?v=1&code=requests.get)
+        ### ``requests/get``
 
         ```python
         async def get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
@@ -135,16 +121,20 @@ struct ModuleListingTests {
         """))
     }
 
-    @Test("keeps the signature in a code block rather than in the link")
-    func signatureIsNotTheLink() {
-        // A link long enough to wrap loses its frame and spills over the line,
-        // so what is linked is the bare name.
-        for line in markdown.split(separator: "\n") where line.hasPrefix("#### [") {
-            let linked = line.dropFirst("#### [".count).prefix { $0 != "]" }
+    @Test("keeps the signature in a code block rather than in the reference")
+    func signatureIsNotTheReference() {
+        // A reference long enough to wrap loses its frame and spills over the
+        // line, so what it shows is the bare name.
+        for line in markdown.split(separator: "\n") where line.hasPrefix("### ``") {
+            let shown = line
+                .dropFirst("### ``".count)
+                .prefix { $0 != "`" }
+                .split(separator: "/")
+                .last ?? ""
 
-            #expect(!linked.isEmpty)
-            #expect(!linked.contains("("))
-            #expect(!linked.contains(" "))
+            #expect(!shown.isEmpty)
+            #expect(!shown.contains("("))
+            #expect(!shown.contains(" "))
         }
     }
 
