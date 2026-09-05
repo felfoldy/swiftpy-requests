@@ -17,25 +17,35 @@ struct HelpMarkdownTests {
         SwiftPyRequests.initialize()
         Interpreter.run("import interpreter")
         Interpreter.run("""
-        import help as _help_module
+        import interpreter.help as _help_module
         _get_md = "\\n".join(_help_module._markdown_lines('requests.get'))
         """)
         markdown = try #require(Interpreter.evaluate("_get_md"))
     }
 
-    @Test("opens with the function name, its module, and its summary")
-    func titleAndSummary() {
+    @Test("opens with its parent, syntax, and summary")
+    func parentSyntaxAndSummary() {
         #expect(markdown.hasPrefix("""
-        # get
-
         ``requests``
+
+        ```python
+        async def get(
+            url: str,
+            params: dict = None,
+            data: Any = None,
+            json: Any = None,
+            headers: dict = None,
+            timeout: float = None,
+            allow_redirects: bool = True,
+        ) -> Response
+        ```
 
         Sends a GET request and returns the Response. Await the result.
         """))
     }
 
-    @Test("credits the module a method belongs to, not its class")
-    func methodModule() throws {
+    @Test("references the class that owns a method")
+    func methodParent() throws {
         Interpreter.run("""
         _method_md = "\\n".join(
             _help_module._markdown_lines('requests.Response.raise_for_status')
@@ -44,9 +54,11 @@ struct HelpMarkdownTests {
         let method: String = try #require(Interpreter.evaluate("_method_md"))
 
         #expect(method.hasPrefix("""
-        # raise_for_status
+        ``requests/Response``
 
-        ``requests``
+        ```python
+        def raise_for_status(self) -> None
+        ```
         """))
     }
 
@@ -54,7 +66,15 @@ struct HelpMarkdownTests {
     func signature() {
         #expect(markdown.contains("""
         ```python
-        async def get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
+        async def get(
+            url: str,
+            params: dict = None,
+            data: Any = None,
+            json: Any = None,
+            headers: dict = None,
+            timeout: float = None,
+            allow_redirects: bool = True,
+        ) -> Response
         ```
         """))
         // The trailing colon belongs to a source stub, not to a signature.
@@ -102,7 +122,7 @@ struct ModuleListingTests {
         SwiftPyRequests.initialize()
         Interpreter.run("import interpreter")
         Interpreter.run("""
-        import help as _help_module
+        import interpreter.help as _help_module
         _module_md = "\\n".join(_help_module._markdown_lines('requests'))
         """)
         markdown = try #require(Interpreter.evaluate("_module_md"))
@@ -111,7 +131,7 @@ struct ModuleListingTests {
     @Test("heads each entry with the name, referencing its own help")
     func entry() {
         #expect(markdown.contains("""
-        ### ``requests/get``
+        ### ``requests/get(url, params, data, json, headers, timeout, allow_redirects)``
 
         ```python
         async def get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
@@ -123,8 +143,8 @@ struct ModuleListingTests {
 
     @Test("keeps the signature in a code block rather than in the reference")
     func signatureIsNotTheReference() {
-        // A reference long enough to wrap loses its frame and spills over the
-        // line, so what it shows is the bare name.
+        // The reference carries parameter names for recognition, while types
+        // and defaults remain in the declaration below it.
         for line in markdown.split(separator: "\n") where line.hasPrefix("### ``") {
             let shown = line
                 .dropFirst("### ``".count)
@@ -133,8 +153,9 @@ struct ModuleListingTests {
                 .last ?? ""
 
             #expect(!shown.isEmpty)
-            #expect(!shown.contains("("))
-            #expect(!shown.contains(" "))
+            #expect(shown.contains("("))
+            #expect(!shown.contains(":"))
+            #expect(!shown.contains("="))
         }
     }
 
