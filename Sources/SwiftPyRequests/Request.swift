@@ -12,8 +12,6 @@ import SwiftPy
 @Scriptable
 @MainActor
 final class Response {
-    typealias object = PyAPI.Reference
-
     /// The HTTP status code of the receiver.
     var statusCode: Int?
 
