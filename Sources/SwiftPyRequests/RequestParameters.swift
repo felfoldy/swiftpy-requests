@@ -29,7 +29,7 @@ struct RequestParameters {
         params: [String: Any]? = nil,
         data: PyObject? = nil,
         json: PyObject? = nil,
-        headers: [String: String]? = nil,
+        headers: [String: PyObject]? = nil,
         timeout: Double? = nil,
         allowRedirects: Bool = true
     ) {
@@ -40,7 +40,7 @@ struct RequestParameters {
         // `data` and `json` can be told apart from an omitted argument.
         self.data = data.flatMap { $0.reference.isNone ? nil : $0 }
         self.json = json.flatMap { $0.reference.isNone ? nil : $0 }
-        self.headers = headers
+        self.headers = headers?.compactMapValues { Keychain.value($0) }
         self.timeout = timeout
         self.allowRedirects = allowRedirects
     }
