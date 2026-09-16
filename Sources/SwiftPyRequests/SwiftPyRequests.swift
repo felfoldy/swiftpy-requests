@@ -74,7 +74,7 @@ private let parameterDocs = """
     params: Mapping appended to the URL's query; a list value repeats the key.
     data: A dict (form encoded), str, or bytes request body.
     json: An object sent as an application/json body. Cannot be used with data.
-    headers: Header fields to add; these override the inferred Content-Type.
+    headers: Header fields to add; these override the inferred Content-Type. A value may be a ``keychain.Secret`` or its ``bearer()``, filled in as the request is sent.
     timeout: Seconds allowed to pass without receiving data.
     """
 
