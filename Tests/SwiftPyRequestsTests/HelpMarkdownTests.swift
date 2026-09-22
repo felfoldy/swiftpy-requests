@@ -13,10 +13,10 @@ import SwiftPyRequests
 struct HelpMarkdownTests {
     let markdown: String
 
-    init() throws {
+    init() async throws {
         SwiftPyRequests.initialize()
-        Interpreter.run("import interpreter")
-        Interpreter.run("""
+        await Interpreter.run("import interpreter")
+        await Interpreter.run("""
         import interpreter.help as _help_module
         _get_md = "\\n".join(_help_module._markdown_lines('requests.get'))
         """)
@@ -29,7 +29,7 @@ struct HelpMarkdownTests {
         ``requests``
 
         ```python
-        async def get(
+        def get(
             url: str,
             params: dict = None,
             data: Any = None,
@@ -40,13 +40,13 @@ struct HelpMarkdownTests {
         ) -> Response
         ```
 
-        Sends a GET request and returns the Response. Await the result.
+        Sends a GET request and returns the Response.
         """))
     }
 
     @Test("references the class that owns a method")
-    func methodParent() throws {
-        Interpreter.run("""
+    func methodParent() async throws {
+        await Interpreter.run("""
         _method_md = "\\n".join(
             _help_module._markdown_lines('requests.Response.raise_for_status')
         )
@@ -62,11 +62,11 @@ struct HelpMarkdownTests {
         """))
     }
 
-    @Test("shows the awaitable signature as a python code block")
+    @Test("shows the signature as a python code block")
     func signature() {
         #expect(markdown.contains("""
         ```python
-        async def get(
+        def get(
             url: str,
             params: dict = None,
             data: Any = None,
@@ -118,10 +118,10 @@ struct HelpMarkdownTests {
 struct ModuleListingTests {
     let markdown: String
 
-    init() throws {
+    init() async throws {
         SwiftPyRequests.initialize()
-        Interpreter.run("import interpreter")
-        Interpreter.run("""
+        await Interpreter.run("import interpreter")
+        await Interpreter.run("""
         import interpreter.help as _help_module
         _module_md = "\\n".join(_help_module._markdown_lines('requests'))
         """)
@@ -134,10 +134,10 @@ struct ModuleListingTests {
         ### ``requests/get(url, params, data, json, headers, timeout, allow_redirects)``
 
         ```python
-        async def get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
+        def get(url: str, params: dict = None, data: Any = None, json: Any = None, headers: dict = None, timeout: float = None, allow_redirects: bool = True) -> Response
         ```
 
-        Sends a GET request and returns the Response. Await the result.
+        Sends a GET request and returns the Response.
         """))
     }
 
@@ -163,7 +163,7 @@ struct ModuleListingTests {
     func sorted() throws {
         let names = ["delete", "get", "head", "patch", "post", "put", "request"]
         let positions = try names.map { name in
-            try #require(markdown.range(of: "async def \(name)(")).lowerBound
+            try #require(markdown.range(of: "def \(name)(")).lowerBound
         }
 
         #expect(positions == positions.sorted())
@@ -176,5 +176,34 @@ struct ModuleListingTests {
 
         ```python
         """))
+    }
+}
+
+/// The awaitable verbs moved to `requests.aio`; the blocking ones under
+/// `requests` are what a cell calls directly.
+@Suite("requests.aio") @MainActor
+struct AsyncModuleTests {
+    init() async throws {
+        SwiftPyRequests.initialize()
+        await Interpreter.run("import interpreter")
+        await Interpreter.run("""
+        import interpreter.help as _help_module
+        _aio_md = "\\n".join(_help_module._markdown_lines('requests.aio.get'))
+        """)
+    }
+
+    @Test("documents the awaitable form")
+    func awaitableSignature() throws {
+        let markdown: String = try #require(Interpreter.evaluate("_aio_md"))
+
+        #expect(markdown.contains("async def get("))
+        #expect(markdown.contains("Await the result."))
+    }
+
+    @Test("reaches the module as an attribute of requests")
+    func reachableFromRequests() async {
+        await Interpreter.run("import requests")
+
+        #expect(Interpreter.evaluate("requests.aio.__name__") == "requests.aio")
     }
 }
