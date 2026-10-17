@@ -56,8 +56,7 @@ final class Response {
         let kind = statusCode < 500 ? "Client Error" : "Server Error"
         let message = "\(statusCode) \(kind): \(reason ?? "Unknown") for url: \(url ?? "")"
 
-        let error: PythonError? = try py.module("requests.exceptions")?.HTTPError?(message)
-        throw error ?? .RuntimeError(message)
+        throw PythonError(type: "requests.exceptions.HTTPError", value: message)
     }
 
     /// Stores everything the received headers carry.
@@ -294,8 +293,6 @@ final class Request {
         }
 
         let message = "\(error.localizedDescription) for url: \(url)"
-        let exceptions = py.module("requests.exceptions")
-        let raised: PythonError? = try? exceptions?[dynamicMember: name]?(message)
-        return raised ?? PythonError.RuntimeError(message)
+        return PythonError(type: "requests.exceptions.\(name)", value: message)
     }
 }
