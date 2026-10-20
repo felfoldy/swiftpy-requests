@@ -28,7 +28,7 @@ final class Response {
     var encoding: String?
 
     /// Content of the response, in bytes.
-    var content = Data()
+    var content: Data = Data()
 
     /// Whether the request was answered with a status below 400.
     var ok: Bool {

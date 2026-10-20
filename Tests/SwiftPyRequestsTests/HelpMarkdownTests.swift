@@ -44,6 +44,18 @@ struct HelpMarkdownTests {
         """))
     }
 
+    @Test("lists every property of Response, content included")
+    func responseProperties() async throws {
+        await Interpreter.run("""
+        _response_md = "\\n".join(_help_module._markdown_lines('requests.Response'))
+        """)
+        let response: String = try #require(Interpreter.evaluate("_response_md"))
+
+        for name in ["status_code", "url", "headers", "reason", "encoding", "content", "ok", "text"] {
+            #expect(response.contains("`\(name)`"), "\(name)")
+        }
+    }
+
     @Test("references the class that owns a method")
     func methodParent() async throws {
         await Interpreter.run("""
