@@ -10,40 +10,15 @@ let package = Package(
             name: "SwiftPyRequests",
             targets: ["SwiftPyRequests"]
         ),
-
-        .library(
-            name: "SwiftPyGit",
-            targets: ["SwiftPyGit"]
-        ),
-
-        .library(
-            name: "SwiftPyPackages",
-            targets: [
-                "SwiftPyPackages",
-                "SwiftPyRequests",
-                "SwiftPyGit"
-            ]
-        ),
     ],
     dependencies: [
         .package(url: "https://github.com/felfoldy/SwiftPy", from: "0.30.0"),
-        .package(url: "https://github.com/ibrahimcetin/libgit2.git", exact: "1.9.2"),
-        // .package(url: "https://github.com/ibrahimcetin/SwiftGitX", branch: "main"),
     ],
     targets: [
         .target(
             name: "SwiftPyRequests",
             dependencies: ["SwiftPy"],
             resources: [.copy("requests.exceptions.py")]
-        ),
-        .target(
-            name: "SwiftPyGit",
-            dependencies: ["SwiftPy", "libgit2"]
-        ),
-        .target(
-            name: "SwiftPyPackages",
-            dependencies: ["SwiftPy", "SwiftPyGit", "SwiftPyRequests"],
-            resources: [.copy("packages.py")]
         ),
         .testTarget(
             name: "SwiftPyRequestsTests",
